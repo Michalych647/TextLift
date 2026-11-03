@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:paddingStart="24dp"
+    android:paddingEnd="12dp">
+
+    <ImageView
+        android:id="@+id/engineCheck"
+        style="@style/ListItemLeadingIcon"
+        android:src="@drawable/ic_check"
+        app:tint="?attr/colorPrimary" />
+
+    <LinearLayout
+        style="@style/ListItemTextGroup"
+        android:paddingVertical="12dp">
+
+        <TextView
+            android:id="@+id/engineName"
+            style="@style/ListItemLabel" />
+
+        <TextView
+            android:id="@+id/engineSummary"
+            style="@style/ListItemSupportingText" />
+
+        <TextView
+            android:id="@+id/engineStatus"
+            style="@style/ListItemSupportingText"
+            android:layout_width="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="?attr/colorPrimary" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/engineConfigure"
+        style="?attr/materialIconButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/engine_configure"
+        app:icon="@drawable/ic_settings" />
+</LinearLayout>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:paddingStart="24dp"
+    android:paddingEnd="12dp">
+
+    <ImageView
+        android:id="@+id/langCheck"
+        style="@style/ListItemLeadingIcon"
+        android:src="@drawable/ic_check"
+        app:tint="?attr/colorPrimary" />
+
+    <LinearLayout
+        style="@style/ListItemTextGroup"
+        android:paddingVertical="10dp">
+
+        <TextView
+            android:id="@+id/langName"
+            style="@style/ListItemLabel" />
+
+        <TextView
+            android:id="@+id/langStatus"
+            style="@style/ListItemSupportingText" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/langAction"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <com.google.android.material.loadingindicator.LoadingIndicator
+            android:id="@+id/langProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            app:indicatorSize="24dp" />
+    </FrameLayout>
+</LinearLayout>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intent_extract_text">Text erkennen</string>
+    <string name="tile_label">OCR Screenshot</string>
+
+    <string name="home_subtitle">Erkennung und Übersetzung laufen lokal auf dem Gerät — ohne Google-Dienste. Internet wird nur zum Laden der Sprachpakete genutzt.</string>
+    <string name="home_hint">Teile ein beliebiges Bild mit TextLift oder füge die Kachel „OCR Screenshot" zu den Schnelleinstellungen hinzu: Kachel antippen, Text markieren.</string>
+    <string name="pick_image">Bild auswählen</string>
+    <string name="camera">Kamera</string>
+    <string name="shortcut_camera_long">Text mit Kamera erfassen</string>
+    <string name="camera_shutter">Foto aufnehmen</string>
+    <string name="camera_torch">Taschenlampe</string>
+    <string name="camera_permission_denied">Für die Aufnahme wird Kamerazugriff benötigt</string>
+    <string name="camera_failed">Foto konnte nicht aufgenommen werden</string>
+
+    <string name="back">Zurück</string>
+    <string name="copy">Kopieren</string>
+    <string name="copy_all">Gesamten Text kopieren</string>
+    <string name="copied">In Zwischenablage kopiert</string>
+    <string name="share">Teilen</string>
+    <string name="select_all">Alles auswählen</string>
+    <string name="select_all_short">Alles</string>
+    <string name="search_web">Im Web suchen</string>
+    <string name="view_as_text">Als Text anzeigen</string>
+    <string name="recognized_text">Erkannter Text</string>
+    <string name="translate">Übersetzen</string>
+    <string name="translate_to">Übersetzen nach</string>
+    <string name="show_original">Original anzeigen</string>
+    <string name="translated_from">%1$s → %2$s</string>
+    <string name="change_language">Ändern</string>
+    <string name="already_in_language">Text ist bereits auf %1$s</string>
+    <string name="downloading_models">Sprachmodelle werden geladen (ca. 30 MB pro Sprache, nur einmal)…</string>
+    <string name="translation_failed">Übersetzung fehlgeschlagen. %1$s</string>
+
+    <string name="set_as_assistant">Als Assistenz-App festlegen</string>
+    <string name="adb_label">Per adb auslösen</string>
+    <string name="adb_copy">adb-Befehl kopieren</string>
+    <string name="capture_failed">Bildschirmaufnahme fehlgeschlagen</string>
+
+    <string name="no_text_found">Kein Text im Bild gefunden</string>
+    <string name="load_failed">Bild konnte nicht geöffnet werden. %1$s</string>
+
+    <string name="home_tagline">Text in Bildern markieren, kopieren und übersetzen</string>
+    <string name="section_setup">Einrichtung</string>
+    <string name="section_translation">Übersetzung</string>
+    <string name="section_more">Tipps &amp; Erweitert</string>
+    <string name="set_as_assistant_summary">Text per Assistenz-Geste erfassen</string>
+    <string name="language_packs">Sprachpakete</string>
+    <string name="language_packs_summary">%1$d installiert · funktioniert offline</string>
+    <string name="language_packs_hint">Jedes Paket ist ca. 30 MB groß und funktioniert nach der Installation offline. Tippe auf eine Sprache, um in sie zu übersetzen.</string>
+    <string name="language_downloaded">Installiert</string>
+    <string name="language_not_downloaded">Nicht installiert · ~30 MB</string>
+    <string name="language_built_in">Integriert</string>
+    <string name="language_downloading">Wird geladen…</string>
+    <string name="language_download">Herunterladen</string>
+    <string name="language_delete">Löschen</string>
+    <string name="language_delete_confirm">Sprachpaket %1$s löschen?</string>
+    <string name="language_download_failed">Download fehlgeschlagen. %1$s</string>
+    <string name="a11y_setup">Bildschirmaufnahme aktivieren</string>
+    <string name="a11y_setup_summary">Aktiviere TextLift in den Bedienungshilfen, damit die Kachel den Bildschirm aufnehmen kann</string>
+    <string name="a11y_label">TextLift Bildschirmaufnahme</string>
+    <string name="a11y_description">Nimmt einen Screenshot auf, wenn du die Kachel antippst oder die Assistenz-Geste nutzt, und hält TextLift aktiv, damit Aufnahmen sofort öffnen. Es empfängt keine Bedienungshilfe-Ereignisse, liest keine Fensterinhalte und beobachtet keine Eingaben.</string>
+    <string name="a11y_not_ready">Bildschirmaufnahme ist aus. Öffne TextLift, um sie zu aktivieren</string>
+    <string name="capture_unsupported">Bildschirmaufnahme erfordert Android 11 oder neuer</string>
+</resources>

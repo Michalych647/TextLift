@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp">
+
+    <LinearLayout
+        style="@style/ListItemTextGroup"
+        android:paddingVertical="10dp">
+
+        <TextView
+            android:id="@+id/ocrEngineTitle"
+            style="@style/ListItemLabel" />
+
+        <TextView
+            android:id="@+id/ocrEngineSummary"
+            style="@style/ListItemSupportingText" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/ocrEngineCheck"
+        style="@style/ListItemTrailingIcon"
+        android:src="@drawable/ic_check" />
+</LinearLayout>

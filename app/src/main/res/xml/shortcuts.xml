@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="camera"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_camera"
+        android:shortcutShortLabel="@string/camera"
+        android:shortcutLongLabel="@string/shortcut_camera_long">
+        <intent
+            android:action="io.github.michalych647.textlift.action.CAMERA"
+            android:targetPackage="io.github.michalych647.textlift"
+            android:targetClass="io.github.michalych647.textlift.CameraActivity" />
+    </shortcut>
+</shortcuts>

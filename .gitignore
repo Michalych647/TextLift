@@ -1,0 +1,16 @@
+*.aab
+*.apk
+*.iml
+*.jks
+*.keystore
+.DS_Store
+.cxx/
+.externalNativeBuild/
+.gradle/
+.idea/
+build.log
+build/
+captures/
+keystore.properties
+keystore/
+local.properties
