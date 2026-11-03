@@ -1,8 +1,50 @@
-# TextLift
+<p align="center">
+  <img src="docs/images/icon.png" alt="TextLift icon" width="96" height="96">
+</p>
+
+<h1 align="center">TextLift</h1>
+
+<p align="center">
+  Pull text out of any image, right on your phone.<br>
+  <a href="../../releases/latest">Download the latest release</a>
+</p>
 
 Select and copy text from any image on Android, without sending the image anywhere. It works a bit like Live Text on iOS or text selection on Pixel phones, but fully local and without Google Play services.
 
 TextLift is a fork of [AhmetCanArslan/TextGrab](https://github.com/AhmetCanArslan/TextGrab), which is itself a fork of [notune/TextGrab](https://github.com/notune/TextGrab). Most of the app comes from their work, and this fork builds on top of it. It has its own name and package, so it installs next to both of them.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <img src="docs/images/home.jpg" alt="Home screen" width="240"><br>
+      <sub>Home screen with the OCR engine and model settings</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <img src="docs/images/select.jpg" alt="Text selection on a screenshot" width="240"><br>
+      <sub>Selecting text straight on a screenshot</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <img src="docs/images/search.jpg" alt="Search inside the image" width="240"><br>
+      <sub>Search inside the image with live highlighting</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <img src="docs/images/translate.jpg" alt="Translated image" width="240"><br>
+      <sub>Translation replaces the text in place</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <img src="docs/images/translate-select.jpg" alt="Selecting translated text" width="240"><br>
+      <sub>Translated text can be selected and copied too</sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <img src="docs/images/recognized-text.jpg" alt="Recognized text view" width="240"><br>
+      <sub>All recognized text in one place, ready to copy or share</sub>
+    </td>
+  </tr>
+</table>
 
 ## What this fork adds
 
