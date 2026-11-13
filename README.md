@@ -60,6 +60,11 @@ Everything below is on top of the parent forks.
 - **Search inside the image.** The search button replaces the toolbar with a search bar. Matches are highlighted in blue as you type, for any alphabet.
 - **Save to gallery.** The save button stores the image, and if translation is on it stores the translated version.
 - **Russian interface** in addition to English and German.
+- **Smart Actions.** Links, phone numbers and postal addresses recognized in the image are underlined and tappable: a link opens your browser, a phone number opens the dialer, an address opens a web search for it. Links and phone numbers need nothing extra; addresses need a small per-language model (about 5 MB) from the new Address models row on the home screen, found with ML Kit Entity Extraction.
+- **QR codes and barcodes.** Decoded automatically and selectable like text, so copy gives you the code's content, not what is printed around it. Built in, nothing to download.
+- **Auto-hiding toolbars.** The top and bottom toolbars fade out a few seconds after opening an image and reappear on any tap, or while text is selected, or while the recognized-text sheet is open. While text is selected they turn translucent instead of disappearing, so they stay reachable without covering the image, and taps on their empty space still reach the image underneath for selection.
+- **Multi-image memory.** When several images are open at once, swiping between them replays the already-recognized text instead of running OCR again, and the switch itself animates with a slide instead of a hard cut.
+- **Clearer model pickers.** Language packs, OCR models and address models each show separate Installed/Available tabs instead of one long list.
 
 ## What the parent forks provide
 

@@ -18,7 +18,6 @@ import android.view.View
 import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +27,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
@@ -41,8 +41,12 @@ import io.github.michalych647.textlift.databinding.ActivityMainBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
@@ -62,6 +66,15 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         private const val TOOLBAR_SLIDE = 0.4f
 
         private const val TOOLBAR_SLIDE_FALLBACK_PX = 96
+
+        private const val COUNTER_HOLD_MS = 1400L
+
+        private const val PAGE_SLIDE = 0.28f
+        private const val PAGE_OUT_MS = 150L
+        private const val PAGE_IN_MS = 280L
+
+        private const val BARS_AUTO_HIDE_MS = 3000L
+        private const val BARS_DIMMED_ALPHA = 0.35f
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -74,6 +87,14 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     private var contentReady = false
 
     private val translationMemory = TranslationMemory()
+
+    /** Recognized text per page, so going back to a page does not run OCR again. */
+    private val pageCache = HashMap<Uri, OcrEngine.Result>()
+    private var pageCacheSignature = ""
+
+    private fun ocrSignature(): String =
+        OcrSettings.selectedId(this) + "|" + TessModels.installed(this).sorted() + "|" +
+            PaddleModels.installed(this).sorted()
     private var searchActive = false
     private var imeWasVisible = false
     private var keepSearchOpen = false
@@ -84,9 +105,23 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
             else Snackbar.make(binding.root, R.string.save_permission_denied, Snackbar.LENGTH_SHORT).show()
         }
 
-    private val pickImage =
-        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-            if (uri != null) openImage(uri)
+    private val pages = ArrayList<Uri>()
+    private var pageIndex = 0
+    private var appendPicked = false
+    private var speaker: Speaker? = null
+    private val counterHide = Runnable { hideCounter() }
+
+    private var barsShown = true
+    private var barsDimmed = false
+    private var topInsetPx = 0
+    private var textSheetOpen = false
+    private val barsAutoHide = Runnable {
+        if (!searchActive && !textSheetOpen && !binding.ocrView.hasSelection()) setBars(false)
+    }
+
+    private val pickImages =
+        registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+            if (uris.isNotEmpty()) onImagesPicked(uris)
         }
 
     private val cameraFile by lazy { CameraActivity.photoFile(this) }
@@ -130,7 +165,10 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            val base = (24 * resources.displayMetrics.density).toInt()
+            val density = resources.displayMetrics.density
+            topInsetPx = bars.top
+            placeCounter()
+            val base = (24 * density).toInt()
             binding.homeGroup.updatePadding(top = base + bars.top, bottom = base + bars.bottom)
             val imeNow = insets.isVisible(WindowInsetsCompat.Type.ime())
             if (searchActive && imeWasVisible && !imeNow) {
@@ -142,15 +180,25 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         }
 
         binding.ocrView.listener = this
+        forwardTouchesWhenDimmed(binding.topBar)
+        forwardTouchesWhenDimmed(binding.bottomBar)
 
         binding.topBar.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
             binding.ocrView.topInset = v.bottom.toFloat()
             binding.ocrProgress.translationY = v.bottom.toFloat()
+            placeCounter()
         }
 
         binding.btnPick.setOnClickListener {
-            pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            appendPicked = false
+            pickImages.launch("image/*")
         }
+        binding.btnAddImage.setOnClickListener {
+            appendPicked = true
+            pickImages.launch("image/*")
+        }
+        binding.btnBoxes.setOnClickListener { binding.ocrView.showBoxes = binding.btnBoxes.isChecked }
+        binding.btnSpeak.setOnClickListener { toggleSpeak() }
         binding.btnCamera.isVisible =
             packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
         binding.btnCamera.setOnClickListener { launchCamera() }
@@ -168,11 +216,6 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
             }
         }
 
-        val adbCommand = "adb shell am broadcast --receiver-foreground " +
-            "-a ${CaptureReceiver.ACTION_CAPTURE} -p $packageName"
-        binding.adbCommand.text = adbCommand
-        binding.adbRow.setOnClickListener { copyToClipboard(adbCommand) }
-
         binding.rowTargetLanguage.setOnClickListener { chooseTargetLanguage() }
         binding.rowLanguagePacks.setOnClickListener {
             LanguagePacksSheet(this) { refreshTranslationRows() }.show()
@@ -185,6 +228,9 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         }
         binding.rowOcrModels.setOnClickListener {
             OcrModelsSheet(this) { refreshTranslationRows() }.show()
+        }
+        binding.rowSmartModels.setOnClickListener {
+            SmartModelsSheet(this) { refreshTranslationRows() }.show()
         }
 
         binding.btnBack.setOnClickListener { onBackFromViewer() }
@@ -296,10 +342,15 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
 
         binding.rowLanguagePacks.isVisible = !engine.isCloud
         binding.textOcrEngine.text = getString(OcrSettings.selected(this).title)
+        binding.rowOcrModels.isVisible = OcrSettings.selectedId(this) != OcrSettings.MLKIT
         binding.textOcrModels.text = if (OcrSettings.selectedId(this) == OcrSettings.PADDLE) {
             getString(R.string.ocr_models_summary_paddle, PaddleModels.installed(this).size)
         } else {
             getString(R.string.ocr_models_summary, TessModels.installed(this).size)
+        }
+        lifecycleScope.launch {
+            binding.textSmartModels.text =
+                getString(R.string.smart_models_summary, SmartModels.installed().size)
         }
         lifecycleScope.launch {
             val count = runCatching { Translator.downloadedLanguages().size }.getOrNull() ?: return@launch
@@ -314,6 +365,10 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     }
 
     override fun onDestroy() {
+        speaker?.shutdown()
+        speaker = null
+        binding.pageCounter.removeCallbacks(counterHide)
+        binding.pageCounter.removeCallbacks(barsAutoHide)
         clearViewerContent()
         super.onDestroy()
     }
@@ -380,9 +435,149 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         binding.progressGroup.isVisible = false
     }
 
-    private fun openImage(uri: Uri, fromCamera: Boolean = false) {
+    private fun onImagesPicked(uris: List<Uri>) {
+        val fresh = uris.distinct()
+        if (appendPicked && pages.isNotEmpty()) {
+            val known = pages.toHashSet()
+            pages.addAll(fresh.filter { it !in known })
+            flashCounter()
+        } else {
+            pages.clear(); pageCache.clear()
+            pages.addAll(fresh)
+            pageIndex = 0
+            launchedWithImage = false
+            openPage(0)
+        }
+    }
+
+    private fun openPage(index: Int) {
+        pageIndex = index
+        openImage(pages[index], keepPages = true)
+    }
+
+    /** Slides the current page away, loads the next one underneath, and slides it in from the other side. */
+    private fun openPageAnimated(index: Int, delta: Int) {
+        pageIndex = index
+        viewingCameraPhoto = false
+        binding.ocrView.capturePreview = false
+        val view = binding.ocrView
+        val distance = view.width * PAGE_SLIDE
+        val uri = pages[index]
+        speaker?.stop()
+        closeSearch()
+        startOcr {
+            try {
+                val bitmap = coroutineScope {
+                    val loading = async { ImageLoader.load(this@MainActivity, uri) }
+                    view.animate().cancel()
+                    view.animate().translationX(-delta * distance).alpha(0f)
+                        .setDuration(PAGE_OUT_MS).setInterpolator(SelectableOcrView.EMPHASIZED_ACCELERATE)
+                    delay(PAGE_OUT_MS)
+                    loading.await()
+                }
+                showImage(bitmap)
+                view.translationX = delta * distance
+                view.alpha = 0f
+                view.animate().translationX(0f).alpha(1f)
+                    .setDuration(PAGE_IN_MS).setInterpolator(SelectableOcrView.EMPHASIZED_DECELERATE)
+                recognize(bitmap, uri)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("TextGrab", "Failed to open $uri", e)
+                resetPageTransform()
+                showHome()
+                Snackbar.make(
+                    binding.root,
+                    getString(R.string.load_failed, e.localizedMessage ?: ""),
+                    Snackbar.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun resetPageTransform() {
+        binding.ocrView.animate().cancel()
+        binding.ocrView.translationX = 0f
+        binding.ocrView.alpha = 1f
+    }
+
+    override fun onSwipePage(delta: Int) {
+        val next = pageIndex + delta
+        if (pages.size < 2 || next !in pages.indices) return
+        openPageAnimated(next, delta)
+        flashCounter()
+    }
+
+    private fun flashCounter() {
+        if (pages.size < 2) return
+        val counter = binding.pageCounter
+        counter.removeCallbacks(counterHide)
+        counter.text = getString(R.string.page_counter, pageIndex + 1, pages.size)
+        counter.animate().cancel()
+        if (!counter.isVisible || counter.alpha == 0f) {
+            counter.translationY = 8f * resources.displayMetrics.density
+        }
+        counter.isVisible = true
+        counter.animate().alpha(1f).translationY(0f).setDuration(160L)
+            .setInterpolator(SelectableOcrView.EMPHASIZED_DECELERATE)
+        counter.postDelayed(counterHide, COUNTER_HOLD_MS)
+    }
+
+    private fun hideCounter() {
+        val counter = binding.pageCounter
+        counter.animate().cancel()
+        counter.animate().alpha(0f).translationY(8f * resources.displayMetrics.density)
+            .setDuration(260L).setInterpolator(SelectableOcrView.EMPHASIZED_ACCELERATE)
+            .withEndAction { counter.isVisible = false }
+    }
+
+    private fun hideCounterNow() {
+        val counter = binding.pageCounter
+        counter.removeCallbacks(counterHide)
+        counter.animate().cancel()
+        counter.alpha = 0f
+        counter.isVisible = false
+    }
+
+    private fun toggleSpeak() {
+        val voice = speaker ?: Speaker(
+            this,
+            onStateChanged = { binding.btnSpeak.isChecked = it },
+            onProblem = { Snackbar.make(binding.root, it, Snackbar.LENGTH_SHORT).show() },
+        ).also { speaker = it }
+        if (voice.isSpeaking) {
+            voice.stop()
+            binding.btnSpeak.isChecked = false
+            return
+        }
+        binding.btnSpeak.isChecked = false
+        val text = (binding.ocrView.selectedText ?: binding.ocrView.displayedText).trim()
+        if (text.isEmpty()) {
+            Snackbar.make(binding.root, R.string.no_text_found, Snackbar.LENGTH_SHORT).show()
+            return
+        }
+        val translated = binding.ocrView.translations != null
+        lifecycleScope.launch {
+            val locale = if (translated) {
+                Locale.forLanguageTag(Translator.defaultTarget(this@MainActivity))
+            } else {
+                Translator.identifyTag(text)?.let { Locale.forLanguageTag(it) }
+            }
+            voice.speak(text, locale)
+        }
+    }
+
+    private fun openImage(uri: Uri, fromCamera: Boolean = false, keepPages: Boolean = false) {
+        if (!keepPages) {
+            pages.clear(); pageCache.clear()
+            pageIndex = 0
+            if (!fromCamera) pages.add(uri)
+            hideCounterNow()
+        }
         viewingCameraPhoto = fromCamera
         binding.ocrView.capturePreview = false
+        resetPageTransform()
 
         showViewer(loading = true)
         startOcr {
@@ -392,7 +587,7 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
                 } finally {
                     if (fromCamera) cameraFile.delete()
                 }
-                processBitmap(bitmap)
+                processBitmap(bitmap, if (keepPages) uri else null)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -408,6 +603,9 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     }
 
     private fun openBitmap(bitmap: Bitmap) {
+        pages.clear(); pageCache.clear()
+        pageIndex = 0
+        hideCounterNow()
         viewingCameraPhoto = false
         binding.ocrView.capturePreview = true
         clearOpenTransition()
@@ -449,6 +647,13 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
             .setDuration((SelectableOcrView.CAPTURE_TRANSITION_MS * TOOLBAR_DURATION).toLong())
             .setInterpolator(SelectableOcrView.EMPHASIZED_DECELERATE)
 
+        binding.bottomBar.alpha = 0f
+        binding.bottomBar.animate()
+            .alpha(1f)
+            .setStartDelay((SelectableOcrView.CAPTURE_TRANSITION_MS * TOOLBAR_DELAY).toLong())
+            .setDuration((SelectableOcrView.CAPTURE_TRANSITION_MS * TOOLBAR_DURATION).toLong())
+            .setInterpolator(SelectableOcrView.EMPHASIZED_DECELERATE)
+
         binding.ocrProgress.alpha = 0f
         binding.ocrProgress.animate()
             .alpha(1f)
@@ -462,31 +667,50 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         ocrJob = lifecycleScope.launch { block() }
     }
 
-    private suspend fun processBitmap(bitmap: Bitmap) {
+    private suspend fun processBitmap(bitmap: Bitmap, key: Uri? = null) {
         showImage(bitmap)
-        recognize(bitmap)
+        recognize(bitmap, key)
     }
 
     private fun showImage(bitmap: Bitmap) {
         translationMemory.clear()
         resetTranslation()
         binding.selectionToolbar.isVisible = false
-        for (v in arrayOf(binding.topBar, binding.ocrProgress, binding.selectionToolbar)) {
+        for (v in arrayOf(binding.topBar, binding.bottomBar, binding.ocrProgress, binding.selectionToolbar)) {
             v.animate().cancel()
             v.alpha = 1f
         }
 
         binding.topBar.translationY = 0f
+        binding.bottomBar.translationY = 0f
+        binding.topBar.visibility = View.VISIBLE
+        binding.bottomBar.visibility = View.VISIBLE
+        barsShown = true
+        barsDimmed = false
+        binding.pageCounter.removeCallbacks(barsAutoHide)
         currentResult = null
         currentBitmap = bitmap
         binding.ocrView.setImage(bitmap)
         showViewer(loading = false)
     }
 
-    private suspend fun recognize(bitmap: Bitmap) {
+    private suspend fun recognize(bitmap: Bitmap, key: Uri? = null) {
+        val signature = ocrSignature()
+        if (signature != pageCacheSignature) {
+            pageCache.clear()
+            pageCacheSignature = signature
+        }
+        val cached = key?.let { pageCache[it] }
+        if (cached != null) {
+            currentResult = cached
+            binding.ocrView.setContent(bitmap, cached)
+            scheduleBarsHide()
+            return
+        }
         binding.ocrProgress.show()
         try {
-            val result = OcrEngine.recognize(this@MainActivity, bitmap)
+            val result = SmartActions.annotate(OcrEngine.recognize(this@MainActivity, bitmap))
+            if (key != null) pageCache[key] = result
             currentResult = result
             binding.ocrView.setContent(bitmap, result)
             if (result.isEmpty) {
@@ -495,9 +719,13 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         } finally {
             binding.ocrProgress.hide()
         }
+        scheduleBarsHide()
     }
 
     private fun showHome() {
+        pages.clear(); pageCache.clear()
+        pageIndex = 0
+        hideCounterNow()
         clearViewerContent()
         binding.homeGroup.isVisible = true
         binding.viewerGroup.isVisible = false
@@ -517,6 +745,8 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     }
 
     private fun clearViewerContent() {
+        resetPageTransform()
+        speaker?.stop()
         closeSearch()
         translationMemory.clear()
         ocrJob?.cancel()
@@ -537,7 +767,7 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
 
         if (launchedWithImage && binding.ocrView.canPlayCaptureExit) {
             val fadeOut = (SelectableOcrView.CAPTURE_TRANSITION_MS * TOOLBAR_DURATION).toLong()
-            for (v in arrayOf(binding.topBar, binding.ocrProgress, binding.selectionToolbar)) {
+            for (v in arrayOf(binding.topBar, binding.bottomBar, binding.ocrProgress, binding.selectionToolbar)) {
                 v.animate()
                     .alpha(0f)
                     .setStartDelay(0)
@@ -557,8 +787,11 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     override fun onSelectionChanged(text: String?, anchor: RectF?) {
         if (text == null || anchor == null) {
             binding.selectionToolbar.isVisible = false
+            dimBars(false)
             return
         }
+        dimBars(true)
+        if (!barsShown) setBars(true)
         binding.selectionToolbar.isVisible = true
         binding.selectionToolbar.post { positionToolbar(anchor) }
     }
@@ -577,6 +810,96 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
 
         toolbar.translationX = x
         toolbar.translationY = y
+    }
+
+    override fun onLinkClick(link: OcrEngine.Link) {
+        val intent = when (link.type) {
+            OcrEngine.LinkType.URL -> Intent(Intent.ACTION_VIEW, Uri.parse(link.value))
+            OcrEngine.LinkType.PHONE -> Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + link.value))
+            OcrEngine.LinkType.ADDRESS -> Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.google.com/search?q=" + Uri.encode(link.value))
+            )
+        }
+        runCatching { startActivity(intent) }.onFailure {
+            Snackbar.make(binding.root, R.string.smart_open_failed, Snackbar.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onBackgroundTap() {
+        setBars(!barsShown)
+    }
+
+    /** Gaps in a translucent toolbar pass touches to the image, so text can be selected through it. */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun forwardTouchesWhenDimmed(bar: View) {
+        bar.setOnTouchListener { v, ev ->
+            if (!barsDimmed) return@setOnTouchListener false
+            val copy = android.view.MotionEvent.obtain(ev)
+            copy.offsetLocation(v.left + v.translationX, v.top + v.translationY)
+            val handled = binding.ocrView.dispatchTouchEvent(copy)
+            copy.recycle()
+            handled
+        }
+    }
+
+    private fun placeCounter() {
+        val density = resources.displayMetrics.density
+        val top = if (barsShown && binding.topBar.isVisible && !searchActive) {
+            binding.topBar.bottom.coerceAtLeast(topInsetPx)
+        } else {
+            topInsetPx
+        }
+        binding.pageCounter.updateLayoutParams<android.widget.FrameLayout.LayoutParams> {
+            gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+            topMargin = top + (8 * density).toInt()
+        }
+    }
+
+    private fun setBars(show: Boolean) {
+        if (show == barsShown || searchActive || !binding.viewerGroup.isVisible) return
+        barsShown = show
+        binding.pageCounter.removeCallbacks(barsAutoHide)
+        val density = resources.displayMetrics.density
+        val top = binding.topBar
+        val bottom = binding.bottomBar
+        val topShift = -(top.height + 48 * density)
+        val bottomShift = bottom.height + 160 * density
+        val target = if (show) (if (barsDimmed) BARS_DIMMED_ALPHA else 1f) else 0f
+        if (show) {
+            top.visibility = View.VISIBLE
+            bottom.visibility = View.VISIBLE
+        }
+        top.animate().cancel()
+        bottom.animate().cancel()
+        top.animate().alpha(target).translationY(if (show) 0f else topShift).setStartDelay(0)
+            .setDuration(220L).setInterpolator(SelectableOcrView.EMPHASIZED_DECELERATE)
+            .withEndAction { if (!barsShown) top.visibility = View.INVISIBLE }
+        bottom.animate().alpha(target).translationY(if (show) 0f else bottomShift).setStartDelay(0)
+            .setDuration(220L).setInterpolator(SelectableOcrView.EMPHASIZED_DECELERATE)
+            .withEndAction { if (!barsShown) bottom.visibility = View.INVISIBLE }
+        placeCounter()
+        if (show) scheduleBarsHide()
+    }
+
+    private fun scheduleBarsHide() {
+        binding.pageCounter.removeCallbacks(barsAutoHide)
+        if (barsShown && !textSheetOpen && binding.viewerGroup.isVisible) {
+            binding.pageCounter.postDelayed(barsAutoHide, BARS_AUTO_HIDE_MS)
+        }
+    }
+
+    /** While text is selected the toolbars turn translucent so they do not cover the image. */
+    private fun dimBars(dim: Boolean) {
+        if (barsDimmed == dim) return
+        barsDimmed = dim
+        if (!barsShown) return
+        val alpha = if (dim) BARS_DIMMED_ALPHA else 1f
+        for (bar in arrayOf(binding.topBar, binding.bottomBar)) {
+            bar.animate().cancel()
+            bar.animate().alpha(alpha).setStartDelay(0).setDuration(160L)
+        }
+        if (!dim) scheduleBarsHide()
     }
 
     private fun copyToClipboard(text: String) {
@@ -625,6 +948,13 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
             sheet.dismiss()
         }
         view.findViewById<View>(R.id.sheetShare).setOnClickListener { shareText(text) }
+        textSheetOpen = true
+        binding.pageCounter.removeCallbacks(barsAutoHide)
+        if (!barsShown) setBars(true)
+        sheet.setOnDismissListener {
+            textSheetOpen = false
+            scheduleBarsHide()
+        }
         sheet.setContentView(view)
         sheet.show()
     }

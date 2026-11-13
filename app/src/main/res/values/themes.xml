@@ -70,4 +70,19 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
     </style>
+
+    <style name="TextLift.Tabs" parent="Widget.Material3.TabLayout">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:layout_marginHorizontal">16dp</item>
+        <item name="tabMode">fixed</item>
+        <item name="tabIndicator">@drawable/tab_pill_indicator</item>
+        <item name="tabIndicatorGravity">stretch</item>
+        <item name="tabIndicatorFullWidth">true</item>
+        <item name="tabIndicatorAnimationMode">elastic</item>
+        <item name="tabIndicatorColor">?attr/colorSecondaryContainer</item>
+        <item name="tabTextColor">?attr/colorOnSurfaceVariant</item>
+        <item name="tabSelectedTextColor">?attr/colorOnSecondaryContainer</item>
+        <item name="tabRippleColor">@android:color/transparent</item>
+        <item name="tabUnboundedRipple">false</item>
+    </style>
 </resources>

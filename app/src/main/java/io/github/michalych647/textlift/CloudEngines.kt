@@ -164,6 +164,9 @@ abstract class LlmEngine(protected val config: EngineSettings.Config) : Translat
 
     protected abstract suspend fun complete(system: String, user: String, outputBudget: Int): String
 
+    suspend fun ask(system: String, user: String, outputBudget: Int): String =
+        complete(system, user, outputBudget)
+
     override suspend fun translate(request: TranslationRequest): List<String> {
         val target = Translator.displayName(request.target)
         val system = system(target, request.target)

@@ -93,6 +93,8 @@ dependencies {
     implementation("com.google.mlkit:text-recognition-korean:16.0.1")
 
     implementation("com.google.mlkit:language-id:17.0.6")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.mlkit:entity-extraction:16.0.0-beta6")
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.7.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.26.0")

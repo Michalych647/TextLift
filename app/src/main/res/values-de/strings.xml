@@ -3,8 +3,6 @@
     <string name="intent_extract_text">Text erkennen</string>
     <string name="tile_label">OCR Screenshot</string>
 
-    <string name="home_subtitle">Erkennung und Übersetzung laufen lokal auf dem Gerät — ohne Google-Dienste. Internet wird nur zum Laden der Sprachpakete genutzt.</string>
-    <string name="home_hint">Teile ein beliebiges Bild mit TextLift oder füge die Kachel „OCR Screenshot" zu den Schnelleinstellungen hinzu: Kachel antippen, Text markieren.</string>
     <string name="pick_image">Bild auswählen</string>
     <string name="camera">Kamera</string>
     <string name="shortcut_camera_long">Text mit Kamera erfassen</string>
@@ -33,8 +31,6 @@
     <string name="translation_failed">Übersetzung fehlgeschlagen. %1$s</string>
 
     <string name="set_as_assistant">Als Assistenz-App festlegen</string>
-    <string name="adb_label">Per adb auslösen</string>
-    <string name="adb_copy">adb-Befehl kopieren</string>
     <string name="capture_failed">Bildschirmaufnahme fehlgeschlagen</string>
 
     <string name="no_text_found">Kein Text im Bild gefunden</string>
@@ -43,7 +39,6 @@
     <string name="home_tagline">Text in Bildern markieren, kopieren und übersetzen</string>
     <string name="section_setup">Einrichtung</string>
     <string name="section_translation">Übersetzung</string>
-    <string name="section_more">Tipps &amp; Erweitert</string>
     <string name="set_as_assistant_summary">Text per Assistenz-Geste erfassen</string>
     <string name="language_packs">Sprachpakete</string>
     <string name="language_packs_summary">%1$d installiert · funktioniert offline</string>
@@ -62,4 +57,17 @@
     <string name="a11y_description">Nimmt einen Screenshot auf, wenn du die Kachel antippst oder die Assistenz-Geste nutzt, und hält TextLift aktiv, damit Aufnahmen sofort öffnen. Es empfängt keine Bedienungshilfe-Ereignisse, liest keine Fensterinhalte und beobachtet keine Eingaben.</string>
     <string name="a11y_not_ready">Bildschirmaufnahme ist aus. Öffne TextLift, um sie zu aktivieren</string>
     <string name="capture_unsupported">Bildschirmaufnahme erfordert Android 11 oder neuer</string>
+    <string name="section_smart">Smarte Aktionen</string>
+    <string name="smart_links">Links, Telefonnummern und Adressen</string>
+    <string name="smart_links_summary">Im Bild antippen, um Browser, Telefon oder Suche zu öffnen</string>
+    <string name="smart_models">Adressmodelle</string>
+    <string name="smart_models_summary">%1$d installiert · ML Kit Entity Extraction</string>
+    <string name="smart_models_title">Adressmodelle</string>
+    <string name="smart_models_hint">Adressen erkennt ML Kit Entity Extraction. Dafür wird ein kleines Modell pro Sprache benötigt (ca. 5 MB). Links und Telefonnummern funktionieren ohne Modell.</string>
+    <string name="smart_barcodes">QR-Codes und Barcodes</string>
+    <string name="smart_barcodes_summary">Wie Text markierbar. Integriert, kein Download</string>
+    <string name="models_none_installed">Noch nichts installiert</string>
+    <string name="models_none_available">Alles installiert</string>
+    <string name="smart_open_failed">Keine App kann das öffnen</string>
+    <string name="smart_model_not_installed">Nicht installiert · ~5 MB</string>
 </resources>

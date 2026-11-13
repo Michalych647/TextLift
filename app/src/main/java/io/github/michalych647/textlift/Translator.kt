@@ -181,7 +181,7 @@ object Translator {
         val runs = ArrayList<MutableList<Int>>()
         var current: MutableList<Int>? = null
         for (id in texts.indices) {
-            if ((only != null && id !in only) || isUntranslatable(texts[id])) {
+            if ((only != null && id !in only) || id in result.fixedLines || isUntranslatable(texts[id])) {
                 current = null
                 continue
             }
@@ -318,6 +318,9 @@ object Translator {
             .sortedByDescending { it.confidence }
             .map { it.languageTag to it.confidence }
     }
+
+    suspend fun identifyTag(text: String): String? =
+        runCatching { candidates(text).firstOrNull { it.second >= 0.4f }?.first }.getOrNull()
 
     internal suspend fun isDownloaded(code: String): Boolean =
         models.isModelDownloaded(TranslateRemoteModel.Builder(code).build()).await()

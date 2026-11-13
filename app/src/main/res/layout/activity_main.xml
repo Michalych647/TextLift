@@ -305,75 +305,85 @@
 
             <TextView
                 style="@style/HomeSectionHeader"
-                android:text="@string/section_more" />
+                android:text="@string/section_smart" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+            <com.google.android.material.listitem.ListItemCardView
+                style="@style/ListItemCard"
+                android:clickable="false"
+                android:focusable="false"
+                app:shapeAppearance="@style/ShapeAppearance.Material3.ListItem.First">
 
-                <com.google.android.material.listitem.ListItemCardView
-                    style="@style/ListItemCard"
-                    android:clickable="false"
-                    android:focusable="false"
-                    app:shapeAppearance="@style/ShapeAppearance.Material3.ListItem.First">
+                <LinearLayout style="@style/ListItemRow">
 
-                    <LinearLayout style="@style/ListItemRow">
+                    <ImageView
+                        style="@style/ListItemLeadingIcon"
+                        android:src="@drawable/ic_bolt" />
 
-                        <ImageView
-                            style="@style/ListItemLeadingIcon"
-                            android:src="@drawable/ic_info" />
+                    <LinearLayout style="@style/ListItemTextGroup">
 
-                        <LinearLayout style="@style/ListItemTextGroup">
+                        <TextView
+                            style="@style/ListItemLabel"
+                            android:text="@string/smart_links" />
 
-                            <TextView
-                                style="@style/ListItemSupportingText"
-                                android:text="@string/home_hint" />
-                        </LinearLayout>
+                        <TextView
+                            style="@style/ListItemSupportingText"
+                            android:text="@string/smart_links_summary" />
                     </LinearLayout>
-                </com.google.android.material.listitem.ListItemCardView>
+                </LinearLayout>
+            </com.google.android.material.listitem.ListItemCardView>
 
-                <com.google.android.material.listitem.ListItemCardView
-                    android:id="@+id/adbRow"
-                    style="@style/ListItemCard"
-                    android:contentDescription="@string/adb_copy"
-                    app:shapeAppearance="@style/ShapeAppearance.Material3.ListItem.Last">
+            <com.google.android.material.listitem.ListItemCardView
+                android:id="@+id/rowSmartModels"
+                style="@style/ListItemCard"
+                app:shapeAppearance="@style/ShapeAppearance.Material3.ListItem.Middle">
 
-                    <LinearLayout style="@style/ListItemRow">
+                <LinearLayout style="@style/ListItemRow">
 
-                        <ImageView
-                            style="@style/ListItemLeadingIcon"
-                            android:src="@drawable/ic_code" />
+                    <ImageView
+                        style="@style/ListItemLeadingIcon"
+                        android:src="@drawable/ic_download" />
 
-                        <LinearLayout style="@style/ListItemTextGroup">
+                    <LinearLayout style="@style/ListItemTextGroup">
 
-                            <TextView
-                                style="@style/ListItemLabel"
-                                android:text="@string/adb_label" />
+                        <TextView
+                            style="@style/ListItemLabel"
+                            android:text="@string/smart_models" />
 
-                            <TextView
-                                android:id="@+id/adbCommand"
-                                style="@style/ListItemSupportingText"
-                                android:layout_marginTop="4dp"
-                                android:fontFamily="monospace" />
-                        </LinearLayout>
-
-                        <ImageView
-                            style="@style/ListItemTrailingIcon"
-                            android:src="@drawable/ic_copy" />
+                        <TextView
+                            android:id="@+id/textSmartModels"
+                            style="@style/ListItemSupportingText" />
                     </LinearLayout>
-                </com.google.android.material.listitem.ListItemCardView>
-            </LinearLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:gravity="center"
-                android:paddingHorizontal="16dp"
-                android:text="@string/home_subtitle"
-                android:textAppearance="?attr/textAppearanceBodySmall"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                    <ImageView
+                        style="@style/ListItemTrailingIcon"
+                        android:src="@drawable/ic_chevron_right" />
+                </LinearLayout>
+            </com.google.android.material.listitem.ListItemCardView>
+
+            <com.google.android.material.listitem.ListItemCardView
+                style="@style/ListItemCard"
+                android:clickable="false"
+                android:focusable="false"
+                app:shapeAppearance="@style/ShapeAppearance.Material3.ListItem.Last">
+
+                <LinearLayout style="@style/ListItemRow">
+
+                    <ImageView
+                        style="@style/ListItemLeadingIcon"
+                        android:src="@drawable/ic_select_all" />
+
+                    <LinearLayout style="@style/ListItemTextGroup">
+
+                        <TextView
+                            style="@style/ListItemLabel"
+                            android:text="@string/smart_barcodes" />
+
+                        <TextView
+                            style="@style/ListItemSupportingText"
+                            android:text="@string/smart_barcodes_summary" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.listitem.ListItemCardView>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
@@ -500,6 +510,69 @@
             </LinearLayout>
         </com.google.android.material.floatingtoolbar.FloatingToolbarLayout>
 
+        <TextView
+            android:id="@+id/pageCounter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:alpha="0"
+            android:background="@drawable/bg_page_counter"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="4dp"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="#FFFFFFFF"
+            android:visibility="gone"
+            tools:text="2 / 50" />
+
+        <com.google.android.material.floatingtoolbar.FloatingToolbarLayout
+            android:id="@+id/bottomBar"
+            style="@style/Widget.Material3.FloatingToolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="40dp"
+            app:marginBottomSystemWindowInsets="true"
+            app:marginLeftSystemWindowInsets="true"
+            app:marginRightSystemWindowInsets="true">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBoxes"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:contentDescription="@string/show_boxes"
+                    app:icon="@drawable/ic_visibility"
+                    app:iconTint="@color/toggle_icon_tint" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSpeak"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:contentDescription="@string/read_aloud"
+                    app:icon="@drawable/ic_hearing"
+                    app:iconTint="@color/toggle_icon_tint" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddImage"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/add_images"
+                    app:icon="@drawable/ic_add" />
+            </LinearLayout>
+        </com.google.android.material.floatingtoolbar.FloatingToolbarLayout>
+
         <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/ocrProgress"
             android:layout_width="match_parent"
@@ -555,6 +628,7 @@
                     android:layout_height="wrap_content"
                     android:contentDescription="@string/search_web"
                     app:icon="@drawable/ic_search" />
+
             </LinearLayout>
         </com.google.android.material.floatingtoolbar.FloatingToolbarLayout>
     </FrameLayout>

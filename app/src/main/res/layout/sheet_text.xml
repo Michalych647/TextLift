@@ -7,6 +7,7 @@
     android:padding="20dp">
 
     <TextView
+        android:id="@+id/sheetTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/recognized_text"
@@ -14,16 +15,15 @@
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
+        android:layout_height="360dp"
         android:layout_marginTop="12dp">
 
         <TextView
             android:id="@+id/sheetText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textIsSelectable="true"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textIsSelectable="true" />
     </androidx.core.widget.NestedScrollView>
 
     <LinearLayout

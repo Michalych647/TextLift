@@ -8,13 +8,15 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.loadingindicator.LoadingIndicator
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -24,11 +26,37 @@ class LanguagePacksSheet(
 ) {
     private val dialog = BottomSheetDialog(activity)
     private val list: LinearLayout
+    private val tabs: TabLayout
     private var downloaded: Set<String> = emptySet()
+    private var query = ""
+    private var showInstalled = true
+
+    private fun fold(text: String): String {
+        val decomposed = java.text.Normalizer.normalize(text.lowercase(), java.text.Normalizer.Form.NFD)
+        return decomposed.filter { Character.getType(it) != Character.NON_SPACING_MARK.toInt() }
+    }
 
     init {
         val view = activity.layoutInflater.inflate(R.layout.sheet_languages, null)
         list = view.findViewById(R.id.languageList)
+        tabs = view.findViewById(R.id.languageTabs)
+        view.minimumHeight = (activity.resources.displayMetrics.heightPixels * 0.85f).toInt()
+        tabs.addTab(tabs.newTab().setText(R.string.ocr_models_installed_header))
+        tabs.addTab(tabs.newTab().setText(R.string.ocr_models_available_header))
+        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                showInstalled = tab.position == 0
+                render()
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
+        view.findViewById<android.widget.EditText>(R.id.languageSearchInput).doAfterTextChanged {
+            query = fold(it?.toString().orEmpty().trim())
+            render()
+        }
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         dialog.setContentView(view)
         dialog.behavior.skipCollapsed = true
         dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
@@ -48,11 +76,25 @@ class LanguagePacksSheet(
 
     private fun render() {
         val target = Translator.defaultTarget(activity)
-
-        val codes = Translator.languages.sortedWith(
-            compareBy<String> { it !in downloaded }.thenBy { Translator.displayName(it) }
-        )
+        val codes = Translator.languages
+            .filter { code ->
+                val installed = code in downloaded || Translator.isBuiltIn(code)
+                (installed == showInstalled || code in Translator.busyLanguages && !showInstalled) &&
+                    (query.isEmpty() || fold(
+                        "${Translator.displayName(code)} $code " +
+                            java.util.Locale.forLanguageTag(code).getDisplayLanguage(java.util.Locale.ENGLISH)
+                    ).contains(query))
+            }
+            .sortedBy { Translator.displayName(it) }
         list.removeAllViews()
+        if (codes.isEmpty()) {
+            list.addView(TextView(activity).apply {
+                setText(if (query.isNotEmpty()) R.string.ocr_models_nothing_found else if (showInstalled) R.string.models_none_installed else R.string.models_none_available)
+                val pad = (24 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad / 2, pad, pad / 2)
+            })
+            return
+        }
         for (code in codes) list.addView(row(code, code == target))
     }
 

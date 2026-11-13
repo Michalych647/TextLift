@@ -4,8 +4,6 @@
     <string name="intent_extract_text">Extract text</string>
     <string name="tile_label">OCR screenshot</string>
 
-    <string name="home_subtitle">Recognition and translation run on this device — no Google services. Internet is only used to download language packs.</string>
-    <string name="home_hint">Share any image to TextLift, or add the \"OCR screenshot\" tile to quick settings: tap the tile, select the text.</string>
     <string name="pick_image">Choose image</string>
     <string name="camera">Camera</string>
     <string name="shortcut_camera_long">Grab text with camera</string>
@@ -34,8 +32,6 @@
     <string name="translation_failed">Translation failed. %1$s</string>
 
     <string name="set_as_assistant">Set as assistant app</string>
-    <string name="adb_label">Trigger via adb</string>
-    <string name="adb_copy">Copy adb command</string>
     <string name="capture_failed">Screen capture failed</string>
 
     <string name="no_text_found">No text found in this image</string>
@@ -44,7 +40,6 @@
     <string name="home_tagline">Select, copy and translate text from any image</string>
     <string name="section_setup">Setup</string>
     <string name="section_translation">Translation</string>
-    <string name="section_more">Tips &amp; advanced</string>
     <string name="set_as_assistant_summary">Grab text with the assistant gesture</string>
     <string name="language_packs">Language packs</string>
     <string name="language_packs_summary">%1$d installed · works offline</string>
@@ -116,6 +111,8 @@
     <string name="ocr_engine_hint">Choose how text is recognized. Both engines work on your device and you can switch at any time.</string>
     <string name="ocr_engine_tesseract">Tesseract</string>
     <string name="ocr_engine_tesseract_summary">Works together with ML Kit. Uses the language models from the OCR models list.</string>
+    <string name="ocr_engine_mlkit">ML Kit</string>
+    <string name="ocr_engine_mlkit_summary">Google ML Kit only, no Tesseract pass. Latin, Chinese, Japanese and Korean models are built into the app, nothing to download.</string>
     <string name="ocr_engine_paddle">PaddleOCR v5</string>
     <string name="ocr_engine_paddle_summary">Neural text detection and recognition. Needs the Universal model and at least one language.</string>
     <string name="ocr_models_summary_paddle">%1$d installed · PaddleOCR v5</string>
@@ -140,6 +137,25 @@
     <string name="image_saved">Saved to gallery</string>
     <string name="image_save_failed">Couldn\'t save the image</string>
     <string name="save_permission_denied">Storage permission is needed to save the image</string>
+    <string name="show_boxes">Show text frames</string>
+    <string name="read_aloud">Read aloud</string>
+    <string name="add_images">Add images</string>
+    <string name="page_counter">%1$d of %2$d</string>
+    <string name="tts_unavailable">Text-to-speech is not available on this device</string>
+    <string name="tts_language_missing">The speech engine has no voice for this text</string>
     <string name="ocr_models_search_hint">Search models</string>
     <string name="ocr_models_nothing_found">Nothing found</string>
+    <string name="section_smart">Smart Actions</string>
+    <string name="smart_links">Links, phones and addresses</string>
+    <string name="smart_links_summary">Tap them in the image to open a browser, the dialer or a search</string>
+    <string name="smart_models">Address models</string>
+    <string name="smart_models_summary">%1$d installed · ML Kit Entity Extraction</string>
+    <string name="smart_models_title">Address models</string>
+    <string name="smart_models_hint">Addresses are found with ML Kit Entity Extraction, which needs a small model for the language of the text (about 5 MB). Links and phone numbers work without any model.</string>
+    <string name="smart_barcodes">QR codes and barcodes</string>
+    <string name="smart_barcodes_summary">Select them like text. Built in, nothing to download</string>
+    <string name="models_none_installed">Nothing is installed yet</string>
+    <string name="models_none_available">Everything is installed</string>
+    <string name="smart_open_failed">No app can open this</string>
+    <string name="smart_model_not_installed">Not installed · ~5 MB</string>
 </resources>

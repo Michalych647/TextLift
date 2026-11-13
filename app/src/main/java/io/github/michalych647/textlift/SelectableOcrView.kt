@@ -33,9 +33,23 @@ class SelectableOcrView @JvmOverloads constructor(
 
     interface Listener {
         fun onSelectionChanged(text: String?, anchor: RectF?)
+
+        fun onSwipePage(delta: Int) {}
+
+        fun onLinkClick(link: OcrEngine.Link) {}
+
+        /** A tap that hit neither a word nor a link. */
+        fun onBackgroundTap() {}
     }
 
     var listener: Listener? = null
+
+    var showBoxes = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
 
     var capturePreview = false
         set(value) {
@@ -116,6 +130,9 @@ class SelectableOcrView @JvmOverloads constructor(
     private var dragMode = DragMode.NONE
     private var dragAnchorWord = -1
 
+    /** Link the dragged end started in: inside it the handle moves freely, entering another one snaps. */
+    private var dragLink = -1
+
     private var dragOffsetX = 0f
     private var dragOffsetY = 0f
 
@@ -150,6 +167,17 @@ class SelectableOcrView @JvmOverloads constructor(
         color = accentColor
         style = Paint.Style.STROKE
         strokeWidth = dp(2f)
+    }
+    private val linkColor = 0xFF1A73E8.toInt()
+    private val linkFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ColorUtils.setAlphaComponent(linkColor, 56)
+        style = Paint.Style.FILL
+    }
+    private val linkLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = linkColor
+        style = Paint.Style.STROKE
+        strokeWidth = dp(2f)
+        strokeCap = Paint.Cap.ROUND
     }
     private val overlayBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val overlayTextPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG)
@@ -242,6 +270,15 @@ class SelectableOcrView @JvmOverloads constructor(
     }
 
     fun hasSelection() = selStart != -1
+
+    /** Text as it is shown now: translated lines where a translation exists. */
+    val displayedText: String
+        get() {
+            val r = result ?: return ""
+            val t = translations ?: return r.fullText
+            val originals = r.lineTexts
+            return originals.indices.joinToString("\n") { t.getOrNull(it) ?: originals[it] }
+        }
 
     val selectedText: String?
         get() {
@@ -449,8 +486,59 @@ class SelectableOcrView @JvmOverloads constructor(
         if (t != null && colors != null && styles != null && overlayAlpha > 0f) {
             drawTranslations(canvas, r, t, colors, styles)
             if (selStart != -1) drawSelection(canvas, r)
-        } else if (selStart == -1) drawHints(canvas, r) else drawSelection(canvas, r)
+        } else if (selStart == -1) {
+            if (showBoxes) drawHints(canvas, r)
+        } else {
+            drawSelection(canvas, r)
+        }
+        if (translations == null && drawnTranslations == null) drawLinks(canvas, r)
         if (searchRects.isNotEmpty()) drawSearch(canvas)
+    }
+
+    private fun drawLinks(canvas: Canvas, r: OcrEngine.Result) {
+        for (link in r.links) {
+            var i = link.first
+            while (i <= link.last) {
+                val union = RectF(r.words[i].box)
+                var j = i
+                while (j + 1 <= link.last && r.words[j + 1].lineId == r.words[i].lineId) {
+                    union.union(r.words[++j].box)
+                }
+                imageMatrix.mapRect(union)
+                union.inset(-dp(2f), -dp(2f))
+                canvas.drawRoundRect(union, dp(3f), dp(3f), linkFillPaint)
+                canvas.drawLine(union.left, union.bottom, union.right, union.bottom, linkLinePaint)
+                i = j + 1
+            }
+        }
+    }
+
+    /** Handles move word by word, but an end that lands inside a link, address or phone takes all of it. */
+    private fun snapSelectionToLinks() {
+        if (selStart == -1) return
+        linkAt(selStart)?.let { selStart = min(selStart, it.first) }
+        linkAt(selEnd)?.let { selEnd = max(selEnd, it.last) }
+    }
+
+    private fun linkIndex(word: Int): Int {
+        val r = result ?: return -1
+        if (translations != null) return -1
+        return r.linkOfWord.getOrNull(word) ?: -1
+    }
+
+    /** Moves a dragged word onto the edge of a link it has just entered, in the direction of travel. */
+    private fun snapEntered(word: Int, forward: Boolean): Int {
+        val index = linkIndex(word)
+        if (index == -1 || index == dragLink) return word
+        val link = result!!.links[index]
+        return if (forward) link.last else link.first
+    }
+
+    private fun linkAt(word: Int): OcrEngine.Link? {
+        val r = result ?: return null
+        if (translations != null) return null
+        val index = r.linkOfWord.getOrNull(word) ?: return null
+        return if (index >= 0) r.links[index] else null
     }
 
     fun selectedLines(): Set<Int>? {
@@ -729,15 +817,34 @@ class SelectableOcrView @JvmOverloads constructor(
                 return true
             }
 
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float,
+            ): Boolean {
+                if (e1 == null || dragMode != DragMode.NONE || scaleDetector.isInProgress) return false
+                if (isUserZoomed || captureProgress < 1f) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                if (abs(dx) < dp(SWIPE_MIN_DISTANCE_DP) || abs(dx) < abs(dy) * 1.5f) return false
+                if (abs(vx) < dp(SWIPE_MIN_VELOCITY_DP)) return false
+                listener?.onSwipePage(if (dx < 0f) 1 else -1)
+                return true
+            }
+
             override fun onSingleTapUp(e: MotionEvent): Boolean {
                 val hit = wordAt(e.x, e.y)
-                if (hit != -1) {
+                val link = if (hit != -1) linkAt(hit) else null
+                if (link != null) {
+                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    listener?.onLinkClick(link)
+                } else if (hit != -1) {
                     selStart = hit
                     selEnd = hit
                     performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                     notifySelection()
                 } else {
+                    val hadSelection = hasSelection()
                     clearSelection()
+                    if (!hadSelection) listener?.onBackgroundTap()
                 }
                 invalidate()
                 return true
@@ -755,6 +862,8 @@ class SelectableOcrView @JvmOverloads constructor(
                     dragAnchorWord = hit
                     selStart = hit
                     selEnd = hit
+                    snapSelectionToLinks()
+                    dragLink = linkIndex(hit)
                     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     notifySelection()
                     invalidate()
@@ -781,6 +890,7 @@ class SelectableOcrView @JvmOverloads constructor(
                 }
                 if (dragMode != DragMode.NONE) {
                     val start = dragMode == DragMode.HANDLE_START
+                    dragLink = linkIndex(if (start) selStart else selEnd)
                     val box = handleWordRect(start)
                     dragOffsetX = (if (start) box.left else box.right) - event.x
                     dragOffsetY = box.centerY() - event.y
@@ -810,17 +920,24 @@ class SelectableOcrView @JvmOverloads constructor(
     }
 
     private fun onSelectionDrag(x: Float, y: Float) {
-        val nearest = if (dragMode == DragMode.SWEEP) nearestWord(x, y)
+        val raw = if (dragMode == DragMode.SWEEP) nearestWord(x, y)
         else nearestWord(x + dragOffsetX, y + dragOffsetY)
-        if (nearest == -1) return
+        if (raw == -1) return
         val oldStart = selStart
         val oldEnd = selEnd
         when (dragMode) {
             DragMode.SWEEP -> {
+                val nearest = snapEntered(raw, raw >= dragAnchorWord)
                 selStart = min(dragAnchorWord, nearest)
                 selEnd = max(dragAnchorWord, nearest)
+                if (dragLink != -1 && linkIndex(nearest) != dragLink) {
+                    val own = result!!.links[dragLink]
+                    selStart = min(selStart, own.first)
+                    selEnd = max(selEnd, own.last)
+                }
             }
             DragMode.HANDLE_START -> {
+                val nearest = snapEntered(raw, false)
                 if (nearest <= selEnd) selStart = nearest else {
                     selStart = selEnd
                     selEnd = nearest
@@ -828,6 +945,7 @@ class SelectableOcrView @JvmOverloads constructor(
                 }
             }
             DragMode.HANDLE_END -> {
+                val nearest = snapEntered(raw, true)
                 if (nearest >= selStart) selEnd = nearest else {
                     selEnd = selStart
                     selStart = nearest
@@ -891,6 +1009,9 @@ class SelectableOcrView @JvmOverloads constructor(
 
     companion object {
         private const val SELECTION_ALPHA = 0x66
+
+        private const val SWIPE_MIN_DISTANCE_DP = 72f
+        private const val SWIPE_MIN_VELOCITY_DP = 400f
 
         const val CAPTURE_TRANSITION_MS = 420f
 

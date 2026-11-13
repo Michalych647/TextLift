@@ -45,6 +45,13 @@
             android:singleLine="true" />
     </com.google.android.material.textfield.TextInputLayout>
 
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/ocrTabs"
+        style="@style/TextLift.Tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp" />
+
     <com.google.android.material.loadingindicator.LoadingIndicator
         android:id="@+id/ocrModelsLoading"
         android:layout_width="wrap_content"

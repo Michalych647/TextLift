@@ -23,6 +23,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.loadingindicator.LoadingIndicator
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayout
 import java.text.Collator
 import java.text.Normalizer
 import java.util.Locale
@@ -152,6 +153,8 @@ class OcrModelsSheet(
     private var terms: List<String> = emptyList()
     private var refreshJob: Job? = null
     private var buildJob: Job? = null
+    private var showInstalled = true
+    private val tabs: TabLayout
 
     init {
         val view = activity.layoutInflater.inflate(R.layout.sheet_ocr_models, null)
@@ -160,6 +163,18 @@ class OcrModelsSheet(
         error = view.findViewById(R.id.ocrModelsError)
         recycler = view.findViewById(R.id.ocrModelList)
         searchInput = view.findViewById(R.id.ocrSearchInput)
+        tabs = view.findViewById(R.id.ocrTabs)
+        tabs.addTab(tabs.newTab().setText(R.string.ocr_models_installed_header))
+        tabs.addTab(tabs.newTab().setText(R.string.ocr_models_available_header))
+        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                showInstalled = tab.position == 0
+                refresh(0L, true)
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
         view.findViewById<TextView>(R.id.ocrModelsHint).setText(
             if (paddle) R.string.ocr_models_hint_paddle else R.string.ocr_models_hint
         )
@@ -265,26 +280,19 @@ class OcrModelsSheet(
                     OcrItem.Row(e.code, e.name, e.size, isInstalled, e.code in busy)
 
                 val out = ArrayList<OcrItem>()
-                if (paddle) {
-                    val universal = shown.firstOrNull { it.code == PaddleModels.UNIVERSAL }
-                    if (universal != null && universal.code !in installed) {
-                        out.add(OcrItem.Header(R.string.ocr_models_universal_header))
-                        out.add(row(universal, false))
-                    }
-                }
-                val have = shown.filter { it.code in installed }
+                val wanted = shown.filter { (it.code in installed) == showInstalled }
                     .sortedBy { if (it.code == PaddleModels.UNIVERSAL) 0 else 1 }
-                val rest = shown.filter { it.code !in installed && it.code != PaddleModels.UNIVERSAL }
-                if (have.isNotEmpty()) {
-                    out.add(OcrItem.Header(R.string.ocr_models_installed_header))
-                    have.mapTo(out) { row(it, true) }
-                }
-                if (rest.isNotEmpty()) {
-                    out.add(OcrItem.Header(R.string.ocr_models_available_header))
-                    rest.mapTo(out) { row(it, false) }
-                }
-                if (out.isEmpty() && query.isNotEmpty()) {
-                    out.add(OcrItem.Header(R.string.ocr_models_nothing_found))
+                wanted.mapTo(out) { row(it, showInstalled) }
+                if (out.isEmpty()) {
+                    out.add(
+                        OcrItem.Header(
+                            when {
+                                query.isNotEmpty() -> R.string.ocr_models_nothing_found
+                                showInstalled -> R.string.models_none_installed
+                                else -> R.string.models_none_available
+                            }
+                        )
+                    )
                 }
                 out
             }

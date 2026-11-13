@@ -3,6 +3,7 @@ package io.github.michalych647.textlift
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
+import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
@@ -35,20 +36,43 @@ object OcrEngine {
         val box: RectF,
         val lineId: Int,
         val rowId: Int,
+        val isBarcode: Boolean = false,
+        /** Continues the previous word with no space, e.g. the parts of a split URL. */
+        val glued: Boolean = false,
     )
+
+    enum class LinkType { URL, PHONE, ADDRESS }
+
+    /** A tappable span of words: a web link, a phone number or a postal address. */
+    data class Link(val type: LinkType, val value: String, val first: Int, val last: Int)
 
     data class Result(
         val words: List<Word>,
         val lineBoxes: List<RectF>,
         val lineBlocks: List<Int>,
+        val fixedLines: Set<Int> = emptySet(),
+        val links: List<Link> = emptyList(),
     ) {
         val isEmpty get() = words.isEmpty()
+
+        /** Index of the link covering each word, or -1. */
+        val linkOfWord: IntArray by lazy {
+            IntArray(words.size) { -1 }.also { map ->
+                links.forEachIndexed { i, l -> for (w in l.first..l.last) map[w] = i }
+            }
+        }
 
         fun textOf(start: Int, end: Int): String {
             val sb = StringBuilder()
             for (i in start..end) {
                 if (i > start) {
-                    sb.append(if (words[i - 1].rowId != words[i].rowId) "\n" else " ")
+                    sb.append(
+                        when {
+                            words[i - 1].rowId != words[i].rowId -> "\n"
+                            words[i].glued && words[i - 1].lineId == words[i].lineId -> ""
+                            else -> " "
+                        }
+                    )
                 }
                 sb.append(words[i].text)
             }
@@ -61,7 +85,12 @@ object OcrEngine {
             get() {
                 val byLine = words.groupBy { it.lineId }
                 return lineBoxes.indices.map { id ->
-                    byLine[id]?.joinToString(" ") { it.text }.orEmpty()
+                    val sb = StringBuilder()
+                    byLine[id]?.forEachIndexed { i, w ->
+                        if (i > 0 && !w.glued) sb.append(' ')
+                        sb.append(w.text)
+                    }
+                    sb.toString()
                 }
             }
     }
@@ -73,6 +102,7 @@ object OcrEngine {
         val conf: Float,
         val crop: RectF,
         val unsure: Boolean,
+        val barcode: Boolean = false,
     )
 
     private class Scored(val lines: List<Line>, val score: Float, val meanConfidence: Float)
@@ -97,6 +127,7 @@ object OcrEngine {
     private const val TESS_NEW_LINE_CONFIDENCE = 0.65f
     private const val TESS_REPLACE_MARGIN = 0.1f
     private const val OVERLAP_THRESHOLD = 0.3f
+    private const val BARCODE_TEXT_OVERLAP = 0.5f
     private const val TESS_UPSCALE_BELOW = 1600
     private const val TARGET_HEIGHT = 56f
     private const val PAD = 12
@@ -142,13 +173,39 @@ object OcrEngine {
         PaddleEngine.release()
     }
 
-    suspend fun recognize(context: Context, bitmap: Bitmap): Result {
+    suspend fun recognize(context: Context, bitmap: Bitmap): Result =
+        buildResult(withBarcodes(bitmap, recognizeLines(context, bitmap)))
+
+    /** QR codes and barcodes become selectable "words" whose text is the decoded content. */
+    private suspend fun withBarcodes(bitmap: Bitmap, text: List<Line>): List<Line> {
+        val codes = runCatching { scanBarcodes(bitmap) }.getOrNull().orEmpty()
+        if (codes.isEmpty()) return text
+        val kept = text.filter { line -> codes.none { overlap(line.box, it.box) >= BARCODE_TEXT_OVERLAP } }
+        return kept + codes
+    }
+
+    private suspend fun scanBarcodes(bitmap: Bitmap): List<Line> {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val found = BarcodeScanning.getClient().use { scanner ->
+            suspendCancellableCoroutine { cont ->
+                scanner.process(image)
+                    .addOnSuccessListener { cont.resume(it) }
+                    .addOnFailureListener { cont.resumeWithException(it) }
+            }
+        }
+        return found.mapNotNull { code ->
+            val value = (code.rawValue ?: code.displayValue)?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            val box = code.boundingBox?.let { RectF(it) } ?: return@mapNotNull null
+            Line(box, listOf(value to box), -1, 1f, box, false, barcode = true)
+        }
+    }
+
+    private suspend fun recognizeLines(context: Context, bitmap: Bitmap): List<Line> {
         if (OcrSettings.selectedId(context) == OcrSettings.PADDLE) {
             val paddle = PaddleEngine.recognize(context, bitmap)
             if (paddle != null) {
-                return buildResult(
-                    paddle.map { Line(it.box, it.words, it.block, it.conf, it.box, false) }
-                )
+                return paddle.map { Line(it.box, it.words, it.block, it.conf, it.box, false) }
             }
         }
 
@@ -162,9 +219,10 @@ object OcrEngine {
             }
         }
 
-        val langs = TessModels.installed(context).sorted().joinToString("+")
+        val mlKitOnly = OcrSettings.selectedId(context) == OcrSettings.MLKIT
+        val langs = if (mlKitOnly) "" else TessModels.installed(context).sorted().joinToString("+")
         val lines = if (langs.isEmpty()) best.lines else tessPasses(context, bitmap, langs, best.lines)
-        return buildResult(lines.filter { it.words.isNotEmpty() })
+        return lines.filter { it.words.isNotEmpty() }
     }
 
     private suspend fun TextRecognizer.run(image: InputImage): Text =
@@ -592,18 +650,20 @@ object OcrEngine {
         val words = ArrayList<Word>()
         val lineBoxes = ArrayList<RectF>()
         val lineBlocks = ArrayList<Int>()
+        val fixed = HashSet<Int>()
         var lineId = 0
         rows.forEachIndexed { rowId, row ->
             for (line in row.sortedBy { it.box.left }) {
                 lineBoxes.add(line.box)
                 lineBlocks.add(line.blockId)
+                if (line.barcode) fixed.add(lineId)
                 for ((t, box) in line.words.sortedBy { it.second.left }) {
-                    words.add(Word(t, box, lineId, rowId))
+                    words.add(Word(t, box, lineId, rowId, line.barcode))
                 }
                 lineId++
             }
         }
-        return Result(words, lineBoxes, lineBlocks)
+        return Result(words, lineBoxes, lineBlocks, fixed)
     }
 
     private fun sameRow(a: RectF, b: RectF): Boolean {

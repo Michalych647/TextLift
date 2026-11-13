@@ -6,6 +6,7 @@ object OcrSettings {
 
     const val TESSERACT = "tesseract"
     const val PADDLE = "paddle"
+    const val MLKIT = "mlkit"
 
     private const val PREFS = "ocr_settings"
     private const val KEY_ENGINE = "engine"
@@ -14,6 +15,7 @@ object OcrSettings {
 
     val engines: List<Info> = listOf(
         Info(TESSERACT, R.string.ocr_engine_tesseract, R.string.ocr_engine_tesseract_summary),
+        Info(MLKIT, R.string.ocr_engine_mlkit, R.string.ocr_engine_mlkit_summary),
         Info(PADDLE, R.string.ocr_engine_paddle, R.string.ocr_engine_paddle_summary),
     )
 

@@ -13,6 +13,9 @@
 
     <queries>
         <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
             <action android:name="android.intent.action.WEB_SEARCH" />
         </intent>
         <intent>
