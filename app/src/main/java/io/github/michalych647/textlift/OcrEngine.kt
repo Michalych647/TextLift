@@ -41,10 +41,18 @@ object OcrEngine {
         val glued: Boolean = false,
     )
 
-    enum class LinkType { URL, PHONE, ADDRESS }
+    enum class LinkType { URL, PHONE, ADDRESS, DATE, CODE }
 
     /** A tappable span of words: a web link, a phone number or a postal address. */
-    data class Link(val type: LinkType, val value: String, val first: Int, val last: Int)
+    data class Link(
+        val type: LinkType,
+        val value: String,
+        val first: Int,
+        val last: Int,
+        /** For dates: the moment in epoch millis, and whether only the day is known. */
+        val time: Long = 0L,
+        val allDay: Boolean = false,
+    )
 
     data class Result(
         val words: List<Word>,
@@ -164,7 +172,16 @@ object OcrEngine {
             .addOnCompleteListener { bmp.recycle() }
     }
 
+    /** Reads in flight; the models stay loaded until the last one finishes. */
+    private var inFlight = 0
+    private var releasePending = false
+
     fun release() {
+        if (inFlight > 0) {
+            releasePending = true
+            return
+        }
+        releasePending = false
         latin?.close()
         latin = null
         tess?.recycle()
@@ -173,8 +190,19 @@ object OcrEngine {
         PaddleEngine.release()
     }
 
-    suspend fun recognize(context: Context, bitmap: Bitmap): Result =
-        buildResult(withBarcodes(bitmap, recognizeLines(context, bitmap)))
+    /** Text, codes and smart links of [bitmap]. */
+    suspend fun read(context: Context, bitmap: Bitmap): Result =
+        SmartActions.annotate(recognize(context, bitmap))
+
+    suspend fun recognize(context: Context, bitmap: Bitmap): Result {
+        inFlight++
+        try {
+            return buildResult(withBarcodes(bitmap, recognizeLines(context, bitmap)))
+        } finally {
+            inFlight--
+            if (inFlight == 0 && releasePending) release()
+        }
+    }
 
     /** QR codes and barcodes become selectable "words" whose text is the decoded content. */
     private suspend fun withBarcodes(bitmap: Bitmap, text: List<Line>): List<Line> {

@@ -1,6 +1,7 @@
 package io.github.michalych647.textlift
 
 import android.graphics.RectF
+import com.google.mlkit.nl.entityextraction.DateTimeEntity
 import com.google.mlkit.nl.entityextraction.Entity
 import com.google.mlkit.nl.entityextraction.EntityExtraction
 import com.google.mlkit.nl.entityextraction.EntityExtractionParams
@@ -99,10 +100,18 @@ object SmartActions {
         val j = join(result)
         val links = ArrayList<OcrEngine.Link>()
 
-        fun add(type: OcrEngine.LinkType, value: String, start: Int, end: Int) {
+        fun add(
+            type: OcrEngine.LinkType, value: String, start: Int, end: Int,
+            time: Long = 0L, allDay: Boolean = false,
+        ) {
             val range = wordRange(j, start, end) ?: return
             if (links.any { range.first <= it.last && range.last >= it.first }) return
-            links.add(OcrEngine.Link(type, value, range.first, range.last))
+            links.add(OcrEngine.Link(type, value, range.first, range.last, time, allDay))
+        }
+
+        // Decoded QR codes and barcodes first, so what they hold is never re-read as a link.
+        result.words.forEachIndexed { i, w ->
+            if (w.isBarcode) links.add(OcrEngine.Link(OcrEngine.LinkType.CODE, w.text, i, i))
         }
 
         for (m in URL.findAll(j.text)) {
@@ -117,28 +126,55 @@ object SmartActions {
             val value = "+" + m.value.filter { it.isDigit() }
             add(OcrEngine.LinkType.PHONE, value, m.range.first, m.range.last + 1)
         }
-        addresses(j.text).forEach { (start, end) ->
-            add(OcrEngine.LinkType.ADDRESS, j.text.substring(start, end).replace('\n', ' '), start, end)
+        entities(j.text).forEach { e ->
+            add(e.type, j.text.substring(e.start, e.end).replace('\n', ' '), e.start, e.end, e.time, e.allDay)
         }
         links.sortBy { it.first }
         return result.copy(links = links)
     }
 
-    /** Postal addresses via ML Kit Entity Extraction, only if a model for the text's language is installed. */
-    private suspend fun addresses(text: String): List<Pair<Int, Int>> {
+    private class Found(
+        val type: OcrEngine.LinkType,
+        val start: Int,
+        val end: Int,
+        val time: Long = 0L,
+        val allDay: Boolean = false,
+    )
+
+    private val DAY_OR_COARSER = setOf(
+        DateTimeEntity.GRANULARITY_YEAR, DateTimeEntity.GRANULARITY_MONTH,
+        DateTimeEntity.GRANULARITY_WEEK, DateTimeEntity.GRANULARITY_DAY,
+    )
+
+    /** Addresses, dates and times via ML Kit Entity Extraction, if a model for the text's language is installed. */
+    private suspend fun entities(text: String): List<Found> {
         val code = Translator.identifyTag(text)?.let { SmartModels.forTag(it) } ?: return emptyList()
         if (!SmartModels.isInstalled(code)) return emptyList()
         return try {
             EntityExtraction.getClient(EntityExtractorOptions.Builder(code).build()).use { extractor ->
                 val params = EntityExtractionParams.Builder(text)
-                    .setEntityTypesFilter(setOf(Entity.TYPE_ADDRESS))
+                    .setEntityTypesFilter(setOf(Entity.TYPE_ADDRESS, Entity.TYPE_DATE_TIME))
                     .build()
-                extractor.annotate(params).await().map { it.start to it.end }
+                extractor.annotate(params).await().mapNotNull { annotation ->
+                    val entity = annotation.entities.firstOrNull() ?: return@mapNotNull null
+                    when (entity.type) {
+                        Entity.TYPE_ADDRESS ->
+                            Found(OcrEngine.LinkType.ADDRESS, annotation.start, annotation.end)
+                        Entity.TYPE_DATE_TIME -> {
+                            val date = entity.asDateTimeEntity() ?: return@mapNotNull null
+                            Found(
+                                OcrEngine.LinkType.DATE, annotation.start, annotation.end,
+                                date.timestampMillis, date.dateTimeGranularity in DAY_OR_COARSER,
+                            )
+                        }
+                        else -> null
+                    }
+                }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("TextGrab", "Address detection failed", e)
+            android.util.Log.e("TextGrab", "Entity detection failed", e)
             emptyList()
         }
     }

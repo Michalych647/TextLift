@@ -2,6 +2,7 @@ package io.github.michalych647.textlift
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -75,6 +76,9 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
 
         private const val BARS_AUTO_HIDE_MS = 3000L
         private const val BARS_DIMMED_ALPHA = 0.35f
+
+        /** What a QR code or barcode may hand to another app; anything else is only shown as text. */
+        private val OPENABLE_SCHEMES = setOf("http", "https", "mailto", "tel", "sms", "smsto", "geo")
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -275,7 +279,7 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
                 searchActive -> closeSearch()
                 binding.ocrView.hasSelection() -> binding.ocrView.clearSelection()
                 binding.viewerGroup.isVisible -> onBackFromViewer()
-                else -> finish()
+                else -> closeScreen()
             }
         }
 
@@ -312,7 +316,7 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     }
 
     private fun refreshSetup() {
-        binding.btnAccessibility.isVisible = ScreenCapture.supported && !ScreenCapture.isEnabled(this)
+        binding.btnAccessibility.isVisible = ScreenCapture.viaAccessibility && !ScreenCapture.isEnabled(this)
         binding.btnSetAssistant.isVisible = !isAssistantApp()
         val needsSetup = binding.btnAccessibility.isVisible || binding.btnSetAssistant.isVisible
         binding.setupHeader.isVisible = needsSetup
@@ -404,11 +408,11 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
                 val captured = CaptureHolder.take()
                 if (captured != null) {
                     launchedWithImage = true
-                    openBitmap(captured)
+                    openCapture(captured)
                 } else if (this is CaptureViewerActivity) finish() else showHome()
             }
             else -> {
-                CaptureHolder.take()
+                CaptureHolder.take()?.reading?.cancel()
                 when {
                     photoTaken -> {
                         launchedForCamera = true
@@ -602,7 +606,8 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         }
     }
 
-    private fun openBitmap(bitmap: Bitmap) {
+    private fun openCapture(capture: CaptureHolder.Capture) {
+        val bitmap = capture.bitmap
         pages.clear(); pageCache.clear()
         pageIndex = 0
         hideCounterNow()
@@ -613,7 +618,16 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         showImage(bitmap)
         binding.ocrView.playCaptureEntry()
         playToolbarEntry()
-        startOcr { recognize(bitmap) }
+        startOcr { recognize(bitmap, null, capture.reading) }
+    }
+
+    /** Back-exit: a capture viewer also drops its recents card; the main app just finishes. */
+    private fun closeScreen() = if (this is CaptureViewerActivity) finishAndRemoveTask() else finish()
+
+    /** Drops the recents card right away, so it does not linger while the exit animation plays. */
+    private fun hideFromRecents() {
+        if (this !is CaptureViewerActivity) return
+        getSystemService(ActivityManager::class.java)?.appTasks?.forEach { it.setExcludeFromRecents(true) }
     }
 
     private fun clearOpenTransition() {
@@ -694,7 +708,12 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         showViewer(loading = false)
     }
 
-    private suspend fun recognize(bitmap: Bitmap, key: Uri? = null) {
+    /** [pending] is a read already started for [bitmap], as for a screen capture. */
+    private suspend fun recognize(
+        bitmap: Bitmap,
+        key: Uri? = null,
+        pending: kotlinx.coroutines.Deferred<OcrEngine.Result>? = null,
+    ) {
         val signature = ocrSignature()
         if (signature != pageCacheSignature) {
             pageCache.clear()
@@ -709,7 +728,15 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
         }
         binding.ocrProgress.show()
         try {
-            val result = SmartActions.annotate(OcrEngine.recognize(this@MainActivity, bitmap))
+            val result = if (pending != null) {
+                try {
+                    pending.await()
+                } finally {
+                    pending.cancel()
+                }
+            } else {
+                OcrEngine.read(this@MainActivity, bitmap)
+            }
             if (key != null) pageCache[key] = result
             currentResult = result
             binding.ocrView.setContent(bitmap, result)
@@ -776,12 +803,13 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
             }
             ocrJob?.cancel()
             binding.ocrProgress.hide()
+            hideFromRecents()
             binding.ocrView.playCaptureExit { finishWithoutTransition() }
             return
         }
 
         clearViewerContent()
-        if (launchedWithImage) finish() else showHome()
+        if (launchedWithImage) closeScreen() else showHome()
     }
 
     override fun onSelectionChanged(text: String?, anchor: RectF?) {
@@ -813,6 +841,32 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
     }
 
     override fun onLinkClick(link: OcrEngine.Link) {
+        showLinkSheet(link)
+    }
+
+    private fun showLinkSheet(link: OcrEngine.Link) {
+        val sheet = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.sheet_text, null)
+
+        val titleRes = when (link.type) {
+            OcrEngine.LinkType.URL -> R.string.smart_title_url
+            OcrEngine.LinkType.PHONE -> R.string.smart_title_phone
+            OcrEngine.LinkType.ADDRESS -> R.string.smart_title_address
+            OcrEngine.LinkType.DATE -> R.string.smart_title_date
+            OcrEngine.LinkType.CODE -> R.string.smart_title_code
+        }
+        view.findViewById<TextView>(R.id.sheetTitle).setText(titleRes)
+        view.findViewById<TextView>(R.id.sheetText).text = link.value
+
+        view.findViewById<View>(R.id.sheetCopy).setOnClickListener {
+            copyToClipboard(link.value)
+            sheet.dismiss()
+        }
+        view.findViewById<View>(R.id.sheetShare).setOnClickListener {
+            shareText(link.value)
+        }
+
+        val openButton = view.findViewById<View>(R.id.sheetOpen)
         val intent = when (link.type) {
             OcrEngine.LinkType.URL -> Intent(Intent.ACTION_VIEW, Uri.parse(link.value))
             OcrEngine.LinkType.PHONE -> Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + link.value))
@@ -820,10 +874,42 @@ open class MainActivity : AppCompatActivity(), SelectableOcrView.Listener {
                 Intent.ACTION_VIEW,
                 Uri.parse("https://www.google.com/search?q=" + Uri.encode(link.value))
             )
+            OcrEngine.LinkType.DATE -> {
+                val cal = java.util.Calendar.getInstance()
+                cal.timeInMillis = link.time
+                Intent(Intent.ACTION_INSERT).apply {
+                    data = android.provider.CalendarContract.Events.CONTENT_URI
+                    putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, link.time)
+                    if (link.allDay) {
+                        putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, true)
+                        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+                        putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, cal.timeInMillis)
+                    } else {
+                        cal.add(java.util.Calendar.HOUR, 1)
+                        putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, cal.timeInMillis)
+                    }
+                }
+            }
+            OcrEngine.LinkType.CODE -> {
+                val uri = Uri.parse(link.value.trim())
+                if (uri.scheme?.lowercase() in OPENABLE_SCHEMES) {
+                    Intent(Intent.ACTION_VIEW, uri)
+                } else null
+            }
         }
-        runCatching { startActivity(intent) }.onFailure {
-            Snackbar.make(binding.root, R.string.smart_open_failed, Snackbar.LENGTH_SHORT).show()
+
+        openButton.isVisible = intent != null
+        openButton.setOnClickListener {
+            if (intent == null) return@setOnClickListener
+            runCatching { startActivity(intent) }
+                .onSuccess { sheet.dismiss() }
+                .onFailure {
+                    Snackbar.make(binding.root, R.string.smart_open_failed, Snackbar.LENGTH_SHORT).show()
+                }
         }
+
+        sheet.setContentView(view)
+        sheet.show()
     }
 
     override fun onBackgroundTap() {

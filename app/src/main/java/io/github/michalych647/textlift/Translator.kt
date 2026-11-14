@@ -62,6 +62,9 @@ object Translator {
 
     private const val MIN_HEIGHT_RATIO = 0.7f
 
+    /** How far, in line heights, a split-off piece of a line may sit from the rest of it. */
+    private const val MAX_FRAGMENT_GAP = 1.2f
+
     private val NUMERIC = Regex(
         """[\d\s.,:;/%$€£¥₺+\-–()×x*]*\d[\d\s.,:;/%$€£¥₺+\-–()]*""" +
             """(am|pm|kb|mb|gb|tb|km|kg|cm|mm|m|g|h|min|s|ms)?\.?""",
@@ -178,19 +181,20 @@ object Translator {
         only: Set<Int>?,
     ): List<Paragraph> {
         val rows = rowOfLine(result)
+        // Lines arrive row by row, so a paragraph's lines are interleaved with whatever else
+        // shares those rows: a side badge, a button, a word OCR split off the end of the line.
+        // Each line therefore joins whichever open paragraph it continues, rather than only the
+        // line read just before it, so one stray label cannot cut a paragraph into fragments.
         val runs = ArrayList<MutableList<Int>>()
-        var current: MutableList<Int>? = null
         for (id in texts.indices) {
-            if ((only != null && id !in only) || id in result.fixedLines || isUntranslatable(texts[id])) {
-                current = null
-                continue
-            }
-            val prev = current?.last()
-            if (prev == null || !continuesParagraph(result, rows, texts, prev, id)) {
-                current = mutableListOf<Int>().also { runs.add(it) }
-            }
-            current!!.add(id)
+            if ((only != null && id !in only) || id in result.fixedLines || isUntranslatable(texts[id])) continue
+            val box = result.lineBoxes[id]
+            val run = runs
+                .filter { continuesParagraph(result, rows, texts, it.last(), id) }
+                .minByOrNull { box.top - result.lineBoxes[it.last()].bottom }
+            if (run != null) run.add(id) else runs.add(mutableListOf(id))
         }
+        absorbFragments(result, rows, runs)
         return runs.map { run ->
             val marker = BULLET.find(texts[run.first()].trimStart())?.value?.trim().orEmpty()
             val body = joinLines(run.map { texts[it] }).let {
@@ -198,6 +202,39 @@ object Translator {
             }
             Paragraph(run, if (marker.isEmpty()) "" else "$marker ", body)
         }.filter { it.text.isNotBlank() }
+    }
+
+    /**
+     * OCR sometimes splits a line in two ("... at work" + "I"). The piece that is not the
+     * paragraph's own column reads as a one-line paragraph of its own; fold it back into the
+     * multi-line paragraph it sits beside. The paragraph's last row is left alone, since what
+     * follows a paragraph there is as likely a separate control ("See more").
+     */
+    private fun absorbFragments(
+        result: OcrEngine.Result,
+        rows: IntArray,
+        runs: MutableList<MutableList<Int>>,
+    ) {
+        for (run in runs.filter { it.size == 1 }) {
+            val id = run[0]
+            val host = runs.firstOrNull { host ->
+                host !== run && host.size > 1 && rows[host.last()] != rows[id] &&
+                    host.any { rows[it] == rows[id] && isBeside(result, it, id) }
+            } ?: continue
+            host.add(id)
+            host.sort()
+            run.clear()
+        }
+        runs.removeAll { it.isEmpty() }
+    }
+
+    private fun isBeside(result: OcrEngine.Result, a: Int, b: Int): Boolean {
+        val x = result.lineBoxes[a]
+        val y = result.lineBoxes[b]
+        val height = max(x.height(), y.height())
+        if (height <= 0f || min(x.height(), y.height()) / height < MIN_HEIGHT_RATIO) return false
+        val gap = max(y.left - x.right, x.left - y.right)
+        return gap in -0.5f * height..MAX_FRAGMENT_GAP * height
     }
 
     private fun rowOfLine(result: OcrEngine.Result): IntArray {

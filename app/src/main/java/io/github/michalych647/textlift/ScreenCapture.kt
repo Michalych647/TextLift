@@ -5,13 +5,19 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.ContextThemeWrapper
+import android.view.LayoutInflater
 import android.widget.Toast
+import io.github.michalych647.textlift.databinding.ActivityMainBinding
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -22,20 +28,26 @@ object CaptureHolder {
 
     private const val MAX_AGE_MS = 30_000L
 
-    private var bitmap: Bitmap? = null
+    /** A screenshot and its text, read while the viewer is still starting. */
+    class Capture(val bitmap: Bitmap, val reading: Deferred<OcrEngine.Result>)
+
+    private var capture: Capture? = null
     private var putAt = 0L
 
     @Synchronized
-    fun put(b: Bitmap) {
-        bitmap = b
+    fun put(c: Capture) {
+        capture?.reading?.cancel()
+        capture = c
         putAt = SystemClock.elapsedRealtime()
     }
 
     @Synchronized
-    fun take(): Bitmap? {
-        val b = bitmap
-        bitmap = null
-        return b?.takeIf { SystemClock.elapsedRealtime() - putAt <= MAX_AGE_MS }
+    fun take(): Capture? {
+        val c = capture ?: return null
+        capture = null
+        if (SystemClock.elapsedRealtime() - putAt <= MAX_AGE_MS) return c
+        c.reading.cancel()
+        return null
     }
 }
 
@@ -43,12 +55,16 @@ object ScreenCapture {
 
     private const val CONNECT_TIMEOUT_MS = 8_000L
     private const val CAPTURE_RETRY_MS = 400L
+    private const val CONSENT_DISMISS_MS = 400L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var job: Job? = null
 
-    /** Accessibility services can take screenshots from Android 11 on. */
-    val supported: Boolean get() = Build.VERSION.SDK_INT >= 30
+    /**
+     * Accessibility services can take screenshots from Android 11 on; before that the capture
+     * goes through a media projection the user grants on the first capture.
+     */
+    val viaAccessibility: Boolean get() = Build.VERSION.SDK_INT >= 30
 
     fun isEnabled(context: Context): Boolean {
         val enabled = Settings.Secure.getString(
@@ -63,28 +79,72 @@ object ScreenCapture {
         val app = context.applicationContext
         job?.cancel()
         return scope.launch {
-            if (Build.VERSION.SDK_INT < 30) {
-                Toast.makeText(app, R.string.capture_unsupported, Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            val service = connect(app)
-            if (service == null) {
-                Toast.makeText(app, R.string.a11y_not_ready, Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            delay(delayMs)
-            // The first screenshot right after the service binds can fail; one more try covers it.
-            val bitmap = service.capture() ?: run {
-                delay(CAPTURE_RETRY_MS)
-                service.capture()
+            val launcher: Context
+            val bitmap: Bitmap?
+            if (Build.VERSION.SDK_INT >= 30) {
+                val service = connect(app)
+                if (service == null) {
+                    Toast.makeText(app, R.string.a11y_not_ready, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                launcher = service
+                if (delayMs > 0) {
+                    // The models load while the shade or the assist gesture gets out of the way.
+                    OcrEngine.warmUp()
+                    delay(delayMs)
+                }
+                bitmap = retryOnce { service.capture() }
+            } else {
+                launcher = app
+                OcrEngine.warmUp()
+                if (!ProjectionCapture.isReady) {
+                    if (!ProjectionCapture.request(app)) return@launch
+                    // The shade is long gone by now; only the prompt has to fade out.
+                    delay(CONSENT_DISMISS_MS)
+                } else if (delayMs > 0) {
+                    delay(delayMs)
+                }
+                bitmap = retryOnce { ProjectionCapture.capture(app) }
             }
             if (bitmap == null) {
                 Toast.makeText(app, R.string.capture_failed, Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            CaptureHolder.put(bitmap)
-            runCatching { service.startActivity(viewerIntent(app)) }
+            // Dispatched rather than immediate, so the viewer is asked for before the models load.
+            val reading = scope.async(Dispatchers.Main) { OcrEngine.read(app, bitmap) }
+            CaptureHolder.put(CaptureHolder.Capture(bitmap, reading))
+            runCatching { launcher.startActivity(viewerIntent(app)) }.onFailure {
+                CaptureHolder.take()?.reading?.cancel()
+                OcrEngine.release()
+            }
         }.also { job = it }
+    }
+
+    /** The first screenshot right after the service binds can fail; one more try covers it. */
+    private suspend fun retryOnce(capture: suspend () -> Bitmap?): Bitmap? =
+        capture() ?: run {
+            delay(CAPTURE_RETRY_MS)
+            capture()
+        }
+
+    /**
+     * Loads the viewer's classes and the OCR libraries once the service binds, which after a
+     * reboot or a background kill happens well before the first capture. Without it that capture
+     * pays for them while the user waits, and after a reboot the app's code is not compiled yet.
+     */
+    fun prewarm(context: Context) {
+        if (job?.isActive == true) return
+        val themed = ContextThemeWrapper(context.applicationContext, R.style.Theme_TextGrab)
+        Looper.myQueue().addIdleHandler {
+            if (job?.isActive != true) {
+                runCatching { ActivityMainBinding.inflate(LayoutInflater.from(themed)) }
+                scope.launch {
+                    runCatching { OcrEngine.read(themed, Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)) }
+                    OcrEngine.release()
+                }
+            }
+            false
+        }
     }
 
     /** After a cold start the system needs a moment to rebind the enabled service. */

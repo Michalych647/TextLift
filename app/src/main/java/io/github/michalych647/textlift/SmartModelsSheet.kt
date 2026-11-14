@@ -38,7 +38,7 @@ class SmartModelsSheet(
         val view = activity.layoutInflater.inflate(R.layout.sheet_languages, null)
         list = view.findViewById(R.id.languageList)
         view.minimumHeight = (activity.resources.displayMetrics.heightPixels * 0.85f).toInt()
-        view.findViewById<TextView>(R.id.languageSheetTitle).setText(R.string.smart_models_title)
+        view.findViewById<TextView>(R.id.languageSheetTitle).setText(R.string.smart_models)
         view.findViewById<TextView>(R.id.languageSheetHint).setText(R.string.smart_models_hint)
         val tabs = view.findViewById<TabLayout>(R.id.languageTabs)
         tabs.addTab(tabs.newTab().setText(R.string.ocr_models_installed_header))
